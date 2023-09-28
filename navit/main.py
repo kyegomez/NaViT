@@ -7,9 +7,122 @@ from einops import rearrange, repeat
 from mgqa.attention import MGQA as Attention
 from torch import Tensor, nn
 from torch.nn.utils.rnn import pad_sequence as orig_pad_sequence
-from zeta import FeedForward, LayerNorm
-from zeta.utils import always, default, divisible_by, exists, pair
 
+# helpers
+
+def exists(val):
+    return val is not None
+
+def default(val, d):
+    return val if exists(val) else d
+
+def always(val):
+    return lambda *args: val
+
+def pair(t):
+    return t if isinstance(t, tuple) else (t, t)
+
+def divisible_by(numer, denom):
+    return (numer % denom) == 0
+
+# classes
+def FeedForward(dim, hidden_dim, dropout = 0.):
+    return nn.Sequential(
+        LayerNorm(dim),
+        nn.Linear(dim, hidden_dim),
+        nn.GELU(),
+        nn.Dropout(dropout),
+        nn.Linear(hidden_dim, dim),
+        nn.Dropout(dropout)
+    )
+
+class LayerNorm(nn.Module):
+    """
+    Layer normalization module.
+
+    Args:
+        dim (int): The dimension of the input tensor.
+        eps (float, optional): A small value added to the denominator for numerical stability. Default is 1e-5.
+        fp16_eps (float, optional): A small value added to the denominator for numerical stability when using fp16 data type. Default is 1e-3.
+        stable (bool, optional): Whether to use a stable implementation of layer normalization. Default is False.
+
+    Attributes:
+        eps (float): A small value added to the denominator for numerical stability.
+        fp16_eps (float): A small value added to the denominator for numerical stability when using fp16 data type.
+        stable (bool): Whether to use a stable implementation of layer normalization.
+        g (torch.nn.Parameter): The learnable scale parameter.
+
+    # Usage
+    ```
+    import torch
+
+    # Create an instance of LayerNorm
+    layer_norm = LayerNorm(dim=10)
+
+    # Create a random input tensor
+    x = torch.randn(32, 10)
+
+    # Apply layer normalization
+    normalized_x = layer_norm(x)
+
+    # Print the normalized tensor
+    print(normalized_x)
+
+    # Apply L2 normalization
+    normalized_x = l2norm(x)
+
+    # Print the normalized tensor
+    print(normalized_x)
+    ```
+
+    """
+
+    def __init__(
+        self,
+        dim,
+        eps=1e-5,
+        fp16_eps=1e-3,
+        stable=False
+    ):
+        super().__init__()
+        self.eps = eps
+        self.fp16_eps = fp16_eps
+        self.stable = stable
+        self.g = nn.Parameter(torch.ones(dim))
+    
+    def forward(self, x):
+        """
+        Forward pass of the layer normalization module.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            torch.Tensor: The normalized tensor.
+
+        """
+        eps = self.eps if x.dtype == torch.float32 else self.fp16_eps
+
+        if self.stable:
+            x = x / x.amax(dim=-1, keepdim=True).detach()
+        
+        var = torch.var(x, dim=-1, unbiased=False, keepdim=True)
+        mean = torch.mean(x, dim=-1, keepdim=True)
+        return (x - mean) * (var + eps).rsqrt() * self.g
+    
+
+def l2norm(t):
+    """
+    L2 normalization function.
+
+    Args:
+        t (torch.Tensor): The input tensor.
+
+    Returns:
+        torch.Tensor: The normalized tensor.
+
+    """
+    return F.normalize(t, dim=-1)
 
 #utils
 def group_images_by_max_seq_len(
