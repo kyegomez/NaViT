@@ -2,13 +2,14 @@ from functools import partial
 from typing import List, Union
 
 import torch
+import torch.nn.functional as F
+from einops import rearrange, repeat
+from mgqa.attention import MGQA as Attention
 from torch import Tensor, nn
 from torch.nn.utils.rnn import pad_sequence as orig_pad_sequence
-from zeta.nn import FeedForward, FlashAttention, LayerNorm, RMSNorm
+from zeta import FeedForward, LayerNorm
 from zeta.utils import always, default, divisible_by, exists, pair
-from mgqa.attention import MGQA as Attention
-from einops import rearrange, reduce, repeat
-import torch.nn.functional as F
+
 
 #utils
 def group_images_by_max_seq_len(
@@ -222,7 +223,7 @@ class NaViT(nn.Module):
 
         #auto pack if specified
         if group_images:
-            batch_images = group_images_by_max_seq_len(
+            group_images_by_max_seq_len(
                 batched_images,
                 patch_size=self.patch_size,
                 calc_token_dropout=self.calc_token_dropout,
@@ -375,10 +376,12 @@ class NaViT(nn.Module):
             batched_image_ids,
             'b j -> b 1 j'
         )
+
         attn_pool_mask = attn_pool_mask & rearrange(
             key_pad_mask,
             'b j -> b 1 j'
         )
+
         attn_pool_mask = rearrange(
             attn_pool_mask,
             'b i j - b 1 i j'
@@ -390,6 +393,7 @@ class NaViT(nn.Module):
             context=x,
             attn_mask=attn_pool_mask,
         ) + queries
+        
         x = rearrange(
             x,
             'b n d -> (b n) d'

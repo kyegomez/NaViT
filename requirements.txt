@@ -1,0 +1,4 @@
+torch
+einops
+zetascale
+mgqa
