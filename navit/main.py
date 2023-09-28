@@ -10,7 +10,7 @@ from torch.nn.utils.rnn import pad_sequence as orig_pad_sequence
 
 from einops import rearrange, repeat
 
-# helpers
+#helpers
 
 def exists(val):
     return val is not None
@@ -26,8 +26,6 @@ def pair(t):
 
 def divisible_by(numer, denom):
     return (numer % denom) == 0
-
-# auto grouping images
 
 def group_images_by_max_seq_len(
     images: List[Tensor],
@@ -70,9 +68,8 @@ def group_images_by_max_seq_len(
 
     return groups
 
-# normalization
-# they use layernorm without bias, something that pytorch does not offer
-
+#normalization
+#they use layernorm without bias, something that pytorch does not offer
 class LayerNorm(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -82,8 +79,7 @@ class LayerNorm(nn.Module):
     def forward(self, x):
         return F.layer_norm(x, x.shape[-1:], self.gamma, self.beta)
 
-# they use a query-key normalization that is equivalent to rms norm (no mean-centering, learned gamma), from vit 22B paper
-
+#they use a query-key normalization that is equivalent to rms norm (no mean-centering, learned gamma), from vit 22B paper
 class RMSNorm(nn.Module):
     def __init__(self, heads, dim):
         super().__init__()
@@ -94,8 +90,7 @@ class RMSNorm(nn.Module):
         normed = F.normalize(x, dim = -1)
         return normed * self.scale * self.gamma
 
-# feedforward
-
+#feedforward
 def FeedForward(dim, hidden_dim, dropout = 0.):
     return nn.Sequential(
         LayerNorm(dim),
@@ -106,6 +101,7 @@ def FeedForward(dim, hidden_dim, dropout = 0.):
         nn.Dropout(dropout)
     )
 
+#attention
 class Attention(nn.Module):
     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
         super().__init__()
@@ -139,7 +135,9 @@ class Attention(nn.Module):
 
         qkv = (self.to_q(x), *self.to_kv(kv_input).chunk(2, dim = -1))
 
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv)
+        q, k, v = map(
+            lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv
+        )
 
         q = self.q_norm(q)
         k = self.k_norm(k)
@@ -160,6 +158,7 @@ class Attention(nn.Module):
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
+#transformer block
 class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout = 0.):
         super().__init__()
@@ -185,13 +184,28 @@ class Transformer(nn.Module):
         return self.norm(x)
 
 class NaViT(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, channels = 3, dim_head = 64, dropout = 0., emb_dropout = 0., token_dropout_prob = None):
+    def __init__(
+        self, 
+        *, 
+        image_size, 
+        patch_size, 
+        num_classes, 
+        dim, 
+        depth, 
+        heads, 
+        mlp_dim, 
+        channels = 3, 
+        dim_head = 64, 
+        dropout = 0., 
+        emb_dropout = 0., 
+        token_dropout_prob = None
+    ):
         super().__init__()
         image_height, image_width = pair(image_size)
 
-        # what percent of tokens to dropout
-        # if int or float given, then assume constant dropout prob
-        # otherwise accept a callback that in turn calculates dropout prob from height and width
+        #what percent of tokens to dropout
+        #if int or float given, then assume constant dropout prob
+        #otherwise accept a callback that in turn calculates dropout prob from height and width
 
         self.calc_token_dropout = None
 
@@ -203,7 +217,7 @@ class NaViT(nn.Module):
             token_dropout_prob = float(token_dropout_prob)
             self.calc_token_dropout = lambda height, width: token_dropout_prob
 
-        # calculate patching related stuff
+        #calculate patching related stuff
 
         assert divisible_by(image_height, patch_size) and divisible_by(image_width, patch_size), 'Image dimensions must be divisible by the patch size.'
 
@@ -226,12 +240,12 @@ class NaViT(nn.Module):
 
         self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim, dropout)
 
-        # final attention pooling queries
+        #final attention pooling queries
 
         self.attn_pool_queries = nn.Parameter(torch.randn(dim))
         self.attn_pool = Attention(dim = dim, dim_head = dim_head, heads = heads)
 
-        # output to logits
+        #output to logits
 
         self.to_latent = nn.Identity()
 
@@ -246,7 +260,7 @@ class NaViT(nn.Module):
 
     def forward(
         self,
-        batched_images: Union[List[Tensor], List[List[Tensor]]], # assume different resolution images already grouped correctly
+        batched_images: Union[List[Tensor], List[List[Tensor]]], #assume different resolution images already grouped correctly
         group_images = False,
         group_max_seq_len = 2048
     ):
@@ -255,7 +269,7 @@ class NaViT(nn.Module):
         arange = partial(torch.arange, device = device)
         pad_sequence = partial(orig_pad_sequence, batch_first = True)
 
-        # auto pack if specified
+        #auto pack if specified
 
         if group_images:
             batched_images = group_images_by_max_seq_len(
@@ -265,7 +279,7 @@ class NaViT(nn.Module):
                 max_seq_len = group_max_seq_len
             )
 
-        # process images into variable lengthed sequences with attention mask
+        #process images into variable lengthed sequences with attention mask
 
         num_images = []
         batched_sequences = []
@@ -312,32 +326,32 @@ class NaViT(nn.Module):
             batched_sequences.append(torch.cat(sequences, dim = 0))
             batched_positions.append(torch.cat(positions, dim = 0))
 
-        # derive key padding mask
+        #derive key padding mask
 
         lengths = torch.tensor([seq.shape[-2] for seq in batched_sequences], device = device, dtype = torch.long)
         max_length = arange(lengths.amax().item())
         key_pad_mask = rearrange(lengths, 'b -> b 1') <= rearrange(max_length, 'n -> 1 n')
 
-        # derive attention mask, and combine with key padding mask from above
+        #derive attention mask, and combine with key padding mask from above
 
         batched_image_ids = pad_sequence(batched_image_ids)
         attn_mask = rearrange(batched_image_ids, 'b i -> b 1 i 1') == rearrange(batched_image_ids, 'b j -> b 1 1 j')
         attn_mask = attn_mask & rearrange(key_pad_mask, 'b j -> b 1 1 j')
 
-        # combine patched images as well as the patched width / height positions for 2d positional embedding
+        #combine patched images as well as the patched width / height positions for 2d positional embedding
 
         patches = pad_sequence(batched_sequences)
         patch_positions = pad_sequence(batched_positions)
 
-        # need to know how many images for final attention pooling
+        #need to know how many images for final attention pooling
 
         num_images = torch.tensor(num_images, device = device, dtype = torch.long)        
 
-        # to patches
+        #to patches
 
         x = self.to_patch_embedding(patches)        
 
-        # factorized 2d absolute positional embedding
+        #factorized 2d absolute positional embedding
 
         h_indices, w_indices = patch_positions.unbind(dim = -1)
 
@@ -346,21 +360,21 @@ class NaViT(nn.Module):
 
         x = x + h_pos + w_pos
 
-        # embed dropout
+        #embed dropout
 
         x = self.dropout(x)
 
-        # attention
+        #attention
 
         x = self.transformer(x, attn_mask = attn_mask)
 
-        # do attention pooling at the end
+        #do attention pooling at the end
 
         max_queries = num_images.amax().item()
 
         queries = repeat(self.attn_pool_queries, 'd -> b n d', n = max_queries, b = x.shape[0])
 
-        # attention pool mask
+        #attention pool mask
 
         image_id_arange = arange(max_queries)
 
@@ -370,20 +384,20 @@ class NaViT(nn.Module):
 
         attn_pool_mask = rearrange(attn_pool_mask, 'b i j -> b 1 i j')
 
-        # attention pool
+        #attention pool
 
         x = self.attn_pool(queries, context = x, attn_mask = attn_pool_mask) + queries
 
         x = rearrange(x, 'b n d -> (b n) d')
 
-        # each batch element may not have same amount of images
+        #each batch element may not have same amount of images
 
         is_images = image_id_arange < rearrange(num_images, 'b -> b 1')
         is_images = rearrange(is_images, 'b n -> (b n)')
 
         x = x[is_images]
 
-        # project out to logits
+        #project out to logits
 
         x = self.to_latent(x)
 
