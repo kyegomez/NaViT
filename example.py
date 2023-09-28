@@ -20,5 +20,5 @@ images = [
     [torch.randn(3, 64, 256)]
 ]
 
-preds = v(images) # (5, 1000) - 5, because 5 images of different resolution above
+preds = v(images)
 print(preds)
