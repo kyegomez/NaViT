@@ -14,10 +14,6 @@ v = NaViT(
     token_dropout_prob = 0.1  # token dropout of 10% (keep 90% of tokens)
 )
 
-# 5 images of different resolutions - List[List[Tensor]]
-
-# for now, you'll have to correctly place images in same batch element as to not exceed maximum allowed sequence length for self-attention w/ masking
-
 images = [
     [torch.randn(3, 256, 256), torch.randn(3, 128, 128)],
     [torch.randn(3, 128, 256), torch.randn(3, 256, 128)],
