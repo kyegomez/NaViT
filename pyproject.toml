@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "navit-torch"
-version = "0.0.5"
+version = "0.0.6"
 description = "navit - Pytorch"
 license = "MIT"
 authors = ["Kye Gomez <kye@apac.ai>"]
@@ -30,6 +30,7 @@ python = "^3.6"
 torch = "*"
 zetascale = "*"
 einops = "*"
+mgqa = "*"
 
 
 

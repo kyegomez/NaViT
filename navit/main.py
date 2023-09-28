@@ -7,7 +7,7 @@ from einops import rearrange, repeat
 from mgqa.attention import MGQA as Attention
 from torch import Tensor, nn
 from torch.nn.utils.rnn import pad_sequence as orig_pad_sequence
-from zeta.nn import FeedForward, LayerNorm
+from zeta import FeedForward, LayerNorm
 from zeta.utils import always, default, divisible_by, exists, pair
 
 
