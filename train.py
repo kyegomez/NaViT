@@ -1,15 +1,15 @@
-import torch 
+import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split
+from torchvision import datasets, transforms
+
 from navit.main import NaViT
 
-#dataset and dataloader
 transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(256),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.255])
+    transforms.Resize((256, 256)),
+    transforms.ToTensor(),  # Convert PIL.Image to tensor
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # Normalize the tensor
 ])
 
 dataset = datasets.CIFAR10(root='data/', train=True, download=True, transform=transform)
@@ -50,7 +50,15 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, device='cuda', num_epochs=10):
+def train_model(
+    model, 
+    train_loader, 
+    val_loader, 
+    criterion, 
+    optimizer, 
+    device='cuda', 
+    num_epochs=10
+):
     # Move model to appropriate device
     model.to(device)
     
@@ -69,14 +77,17 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device='c
         correct_train = 0
         total_train = 0
         
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
+        for batched_images, labels in train_loader:
+            # Convert the batched tensor into a list of individual image tensors
+            images_list = [img.unsqueeze(0) for img in batched_images]
+            
+            images_list, labels = images_list.to(device), labels.to(device)
             
             # Zero the parameter gradients
             optimizer.zero_grad()
             
             # Forward pass
-            outputs = model(images)
+            outputs = model(images_list)
             
             # Compute loss
             loss = criterion(outputs, labels)
@@ -103,11 +114,14 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device='c
         total_val = 0
         
         with torch.no_grad():
-            for images, labels in val_loader:
-                images, labels = images.to(device), labels.to(device)
+            for batched_images, labels in val_loader:
+                # Convert the batched tensor into a list of individual image tensors
+                images_list = [img.unsqueeze(0) for img in batched_images]
+                
+                images_list, labels = images_list.to(device), labels.to(device)
                 
                 # Forward pass
-                outputs = model(images)
+                outputs = model(images_list)
                 
                 # Compute loss
                 loss = criterion(outputs, labels)
@@ -132,6 +146,10 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, device='c
         print(f"Epoch [{epoch+1}/{num_epochs}] - Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}%, Val Loss: {avg_val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
     
     return history
+
+# NOTE: This function call is for demonstration and will not run here since we don't have the actual NaViT model and data loaded.
+# You can run this in your environment where you have the NaViT model and data.
+
 
 # NOTE: The function call below is commented out since we don't have the actual NaViT model and data loaded.
 # train_model(model, train_loader, val_loader, criterion, optimizer)
