@@ -147,12 +147,6 @@ def train_model(
     
     return history
 
-# NOTE: This function call is for demonstration and will not run here since we don't have the actual NaViT model and data loaded.
-# You can run this in your environment where you have the NaViT model and data.
-
-
-# NOTE: The function call below is commented out since we don't have the actual NaViT model and data loaded.
-# train_model(model, train_loader, val_loader, criterion, optimizer)
 
 train_model(
     model,
